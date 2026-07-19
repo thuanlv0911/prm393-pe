@@ -1,10 +1,8 @@
-import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/user.dart';
 import '../repositories/sqlite_user_repository.dart';
 import '../repositories/user_repository.dart';
-
-part 'user_view_model.g.dart';
 
 class UserState {
   final List<UserModel> items;
@@ -27,27 +25,17 @@ class UserState {
   }
 }
 
-@riverpod
-UserRepository userRepository(UserRepositoryRef ref) {
-  return SqliteUserRepository();
-}
-
-@riverpod
-class UserViewModel extends _$UserViewModel {
-  late final UserRepository _repository;
-
-  @override
-  UserState build() {
-    _repository = ref.watch(userRepositoryProvider);
-    // Tự động tải danh sách user sau khi build xong
-    Future.microtask(() => loadUsers());
-    return const UserState(isLoading: true);
+class UserViewModel extends StateNotifier<UserState> {
+  UserViewModel(this.repository) : super(const UserState(isLoading: true)) {
+    loadUsers();
   }
+
+  final UserRepository repository;
 
   Future<void> loadUsers() async {
     // TODO: Gọi repository.getUsers(), cập nhật state.items và isLoading=false.
     state = state.copyWith(isLoading: true);
-    final users = await _repository.getUsers();
+    final users = await repository.getUsers();
     state = UserState(items: users, isLoading: false);
   }
 
@@ -72,7 +60,7 @@ class UserViewModel extends _$UserViewModel {
       avatar: avatar,
     );
 
-    await _repository.addUser(newUser);
+    await repository.addUser(newUser);
 
     state = state.copyWith(
       items: <UserModel>[...state.items, newUser],
@@ -81,7 +69,7 @@ class UserViewModel extends _$UserViewModel {
 
   Future<void> updateUser(UserModel user) async {
     // TODO: Gọi repository.updateUser và cập nhật đúng phần tử theo id trong state.
-    await _repository.updateUser(user);
+    await repository.updateUser(user);
     state = state.copyWith(
       items: state.items.map((u) => u.id == user.id ? user : u).toList(),
     );
@@ -89,18 +77,18 @@ class UserViewModel extends _$UserViewModel {
 
   Future<void> deleteUser(int id) async {
     // TODO: Gọi repository.deleteUser và xoá đúng phần tử theo id trong state.
-    await _repository.deleteUser(id);
+    await repository.deleteUser(id);
     state = state.copyWith(
       items: state.items.where((u) => u.id != id).toList(),
     );
   }
 }
 
-// final userRepositoryProvider = Provider<UserRepository>((ref) {
-//   return InMemoryUserRepository();
-// });
+final userRepositoryProvider = Provider<UserRepository>((ref) {
+  return SqliteUserRepository();
+});
 
-// final userViewModelProvider =
-//     StateNotifierProvider<UserViewModel, UserState>((ref) {
-//   return UserViewModel(ref.watch(userRepositoryProvider));
-// });
+final userViewModelProvider =
+    StateNotifierProvider<UserViewModel, UserState>((ref) {
+  return UserViewModel(ref.watch(userRepositoryProvider));
+});
