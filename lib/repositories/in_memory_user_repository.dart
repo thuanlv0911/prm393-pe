@@ -15,15 +15,21 @@ class InMemoryUserRepository implements UserRepository {
   @override
   Future<void> addUser(UserModel user) async {
     // TODO: Thêm user vào _users.
+    _users.add(user);
   }
 
   @override
   Future<void> updateUser(UserModel user) async {
     // TODO: Tìm user cùng id và cập nhật thông tin.
+    final index = _users.indexWhere((u) => u.id == user.id);
+    if (index != -1) {
+      _users[index] = user;
+    }
   }
 
   @override
   Future<void> deleteUser(int id) async {
     // TODO: Xoá user theo id.
+    _users.removeWhere((u) => u.id == id);
   }
 }

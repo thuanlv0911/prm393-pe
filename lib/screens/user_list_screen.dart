@@ -44,18 +44,38 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
             // Portrait hiển thị form phía trên, danh sách 1 cột phía dưới.
             return Padding(
               padding: const EdgeInsets.all(12),
-              child: Column(
-                children: <Widget>[
-                  _buildForm(),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: _buildUserList(
-                      users: state.items,
-                      isLandscape: isLandscape,
+              child: isLandscape
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Expanded(
+                          flex: 2,
+                          child: SingleChildScrollView(
+                            child: _buildForm(),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 3,
+                          child: _buildUserList(
+                            users: state.items,
+                            isLandscape: isLandscape,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      children: <Widget>[
+                        _buildForm(),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: _buildUserList(
+                            users: state.items,
+                            isLandscape: isLandscape,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             );
           },
         ),
@@ -206,12 +226,25 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
     // Message yêu cầu:
     // - Họ và tên không được để trống
     // - Họ và tên tối thiểu 2 ký tự
+    if (value == null || value.trim().isEmpty) {
+      return 'Họ và tên không được để trống';
+    }
+    if (value.trim().length < 2) {
+      return 'Họ và tên tối thiểu 2 ký tự';
+    }
     return null;
   }
 
   String? _validateEmail(String? value) {
     // TODO: Bắt buộc nhập đúng định dạng email.
     // Message yêu cầu: Email không đúng định dạng
+    if (value == null || value.trim().isEmpty) {
+      return 'Email không đúng định dạng';
+    }
+    final emailRegExp = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    if (!emailRegExp.hasMatch(value.trim())) {
+      return 'Email không đúng định dạng';
+    }
     return null;
   }
 
@@ -219,6 +252,9 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
     // TODO: Bắt buộc có avatar khi submit.
     // Có thể dùng defaultAvatarPath làm ảnh hiển thị mặc định khi avatar rỗng.
     // Message yêu cầu: Vui lòng chọn ảnh đại diện
+    if (value == null || value.trim().isEmpty) {
+      return 'Vui lòng chọn ảnh đại diện';
+    }
     return null;
   }
 
@@ -232,15 +268,63 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
     // 2. Nếu đang thêm mới, gọi ref.read(userViewModelProvider.notifier).addUser.
     // 3. Nếu đang sửa, gọi updateUser với dữ liệu mới.
     // 4. Sau khi lưu thành công: đặt _editingUser = null, reset form, clear cả 3 controller.
+    if (!_formKey.currentState!.validate()) {
+      if (_editingUser != null) {
+        _fullNameController.clear();
+        _avatarController.clear();
+        setState(() {});
+      }
+      return;
+    }
+
+    final fullName = _fullNameController.text.trim();
+    final email = _emailController.text.trim();
+    final avatar = _avatarController.text.trim();
+
+    if (_editingUser == null) {
+      await ref.read(userViewModelProvider.notifier).addUser(
+        fullName: fullName,
+        email: email,
+        avatar: avatar,
+      );
+    } else {
+      final updatedUser = _editingUser!.copyWith(
+        fullName: fullName,
+        email: email,
+        avatar: avatar,
+      );
+      await ref.read(userViewModelProvider.notifier).updateUser(updatedUser);
+    }
+
+    setState(() {
+      _editingUser = null;
+      _formKey.currentState?.reset();
+      _fullNameController.clear();
+      _emailController.clear();
+      _avatarController.clear();
+    });
   }
 
   void _startEdit(UserModel user) {
     // TODO: Gán _editingUser và điền dữ liệu user vào 3 TextEditingController.
+    setState(() {
+      _editingUser = user;
+      _fullNameController.text = user.fullName;
+      _emailController.text = user.email;
+      _avatarController.text = user.avatar;
+    });
   }
 
   void _cancelEdit() {
     // TODO: Huỷ sửa, đặt _editingUser = null, reset form, clear cả 3 controller.
     // Sau khi huỷ, bản nháp đang gõ không được còn xuất hiện trên UI.
+    setState(() {
+      _editingUser = null;
+      _formKey.currentState?.reset();
+      _fullNameController.clear();
+      _emailController.clear();
+      _avatarController.clear();
+    });
   }
 
   Future<void> _confirmDelete(UserModel user) async {
@@ -248,6 +332,31 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
     // Nút huỷ: Key('btn_cancel_delete'), text 'Huỷ'.
     // Nút xác nhận: Key('btn_confirm_delete'), text 'Xoá'.
     // Chỉ gọi deleteUser khi người dùng xác nhận.
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          key: const Key('delete_confirm_dialog'),
+          title: const Text('Xác nhận xóa'),
+          content: Text('Bạn có chắc chắn muốn xóa ${user.fullName} không?'),
+          actions: <Widget>[
+            TextButton(
+              key: const Key('btn_cancel_delete'),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Huỷ'),
+            ),
+            TextButton(
+              key: const Key('btn_confirm_delete'),
+              onPressed: () {
+                ref.read(userViewModelProvider.notifier).deleteUser(user.id);
+                Navigator.of(context).pop();
+              },
+              child: const Text('Xoá'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _openDetail(UserModel user) {
